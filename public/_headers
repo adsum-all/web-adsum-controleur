@@ -1,0 +1,9 @@
+# index.html is never cached so the browser always loads the latest hashed assets.
+/
+  Cache-Control: no-cache, must-revalidate
+/index.html
+  Cache-Control: no-cache, must-revalidate
+
+# Vite fingerprints these, so they are safe to cache forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
