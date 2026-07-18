@@ -25,6 +25,10 @@ export interface CheckinMember {
   photo_url?: string | null;
   /** Function label (Responsable, Coordinatrice...), resolved by gender. */
   titre?: string | null;
+  /** Category-aware appellation and its winning category (central resolver):
+   * special function > title > function > particular. Preferred on the scan card. */
+  appellation?: string | null;
+  categorie_principale?: string | null;
 }
 
 export interface CheckinResult {
@@ -56,6 +60,9 @@ export interface DirectoryMember {
   statut: string;
   /** Function label (Responsable, Coordinatrice...), resolved by gender. */
   titre?: string | null;
+  /** Category-aware appellation and its winning category (central resolver). */
+  appellation?: string | null;
+  categorie_principale?: string | null;
 }
 
 export interface CheckoutResult {
@@ -101,20 +108,62 @@ async function readDetail(res: Response): Promise<string | null> {
   }
 }
 
-export async function login(email: string, password: string): Promise<string> {
+export function deviceId(): string {
+  if (typeof localStorage === "undefined") return "";
+  let id = localStorage.getItem("adsum.device.id");
+  if (!id) {
+    id = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `dev-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem("adsum.device.id", id);
+  }
+  return id;
+}
+
+export interface LoginResult {
+  otpRequired: boolean;
+  token: string | null;
+  canal: string | null;
+}
+
+function loginError(status: number): ApiError {
+  if (status === 401) return new ApiError("Identifiants invalides ou mot de passe temporaire expiré", status);
+  if (status === 429) return new ApiError("Trop de tentatives. Patientez quelques minutes, puis réessayez.", status);
+  if (status === 400) return new ApiError("Code incorrect ou expiré. Vérifiez et réessayez.", status);
+  return new ApiError("Service momentanément indisponible.", status);
+}
+
+export async function login(email: string, password: string): Promise<LoginResult> {
   const res = await fetch(`${BASE}/api/v1/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Device-Id": deviceId() },
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) {
-    throw new ApiError(
-      res.status === 401 ? "Identifiants invalides" : "Service indisponible",
-      res.status,
-    );
-  }
-  const data = (await res.json()) as { access_token: string };
+  if (!res.ok) throw loginError(res.status);
+  const data = (await res.json()) as { otp_required?: boolean; access_token?: string | null; canal?: string | null };
+  return { otpRequired: Boolean(data.otp_required), token: data.access_token ?? null, canal: data.canal ?? null };
+}
+
+export async function loginVerify(email: string, password: string, code: string, faireConfiance: boolean): Promise<string> {
+  const res = await fetch(`${BASE}/api/v1/auth/login-verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Device-Id": deviceId() },
+    body: JSON.stringify({ email, password, code, faire_confiance: faireConfiance }),
+  });
+  if (!res.ok) throw loginError(res.status);
+  const data = (await res.json()) as { access_token?: string | null };
+  if (!data.access_token) throw loginError(401);
   return data.access_token;
+}
+
+/** Control access is the controle.controler permission; the server enforces it on
+ * every control endpoint. We confirm it at login so a granted account gets in and
+ * an ungranted one gets a clear message instead of a broken screen. */
+export async function aAccesControle(token: string): Promise<boolean> {
+  const res = await fetch(`${BASE}/api/v1/membres/me/permissions`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return false;
+  const data = (await res.json()) as { permissions?: string[] };
+  return (data.permissions ?? []).includes("controle.controler");
 }
 
 export async function getControlEvents(token: string): Promise<ControlEvent[]> {
