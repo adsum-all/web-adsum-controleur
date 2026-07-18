@@ -24,7 +24,14 @@ export function ManualEntry({ token, event, online, onQueueChange }: ManualEntry
 
   async function record(member: DirectoryMember): Promise<void> {
     const nomComplet = `${member.prenoms ?? ""} ${member.nom ?? ""}`.trim() || member.matricule;
-    const label = member.titre ? `${member.titre} ${nomComplet}` : nomComplet;
+    // A title or special function stands on its own (already the full appellation);
+    // an ordinary function prefixes the civil name.
+    const label =
+      (member.categorie_principale === "titre" || member.categorie_principale === "fonction_speciale") && member.appellation
+        ? member.appellation
+        : member.titre
+          ? `${member.titre} ${nomComplet}`
+          : nomComplet;
     enqueue({ kind: "manual", membreId: member.id, evenementId: event.id, matricule: member.matricule, label });
     onQueueChange();
     if (online) {
@@ -53,7 +60,11 @@ export function ManualEntry({ token, event, online, onQueueChange }: ManualEntry
           <li key={m.id}>
             <button type="button" className="event" onClick={() => void record(m)}>
               <div className="event-main">
-                <strong>{`${m.titre ? `${m.titre} ` : ""}${`${m.prenoms ?? ""} ${m.nom ?? ""}`.trim() || m.matricule}`}</strong>
+                <strong>{
+                  (m.categorie_principale === "titre" || m.categorie_principale === "fonction_speciale") && m.appellation
+                    ? m.appellation
+                    : `${m.titre ? `${m.titre} ` : ""}${`${m.prenoms ?? ""} ${m.nom ?? ""}`.trim() || m.matricule}`
+                }</strong>
                 <span className="muted">
                   {m.matricule} . {m.commission ?? "-"}
                 </span>

@@ -25,6 +25,10 @@ export interface CheckinMember {
   photo_url?: string | null;
   /** Function label (Responsable, Coordinatrice...), resolved by gender. */
   titre?: string | null;
+  /** Category-aware appellation and its winning category (central resolver):
+   * special function > title > function > particular. Preferred on the scan card. */
+  appellation?: string | null;
+  categorie_principale?: string | null;
 }
 
 export interface CheckinResult {
@@ -56,6 +60,9 @@ export interface DirectoryMember {
   statut: string;
   /** Function label (Responsable, Coordinatrice...), resolved by gender. */
   titre?: string | null;
+  /** Category-aware appellation and its winning category (central resolver). */
+  appellation?: string | null;
+  categorie_principale?: string | null;
 }
 
 export interface CheckoutResult {
