@@ -80,8 +80,19 @@ export function Scanner({ token, event, online, onQueueChange }: ScannerProps): 
       kind: "valid",
       membreId,
       label: civil,
-      pastoral: member?.est_berger ? (member?.nom_pastoral_affiche ?? null) : null,
-      fonction: member?.titre ?? null,
+      // Category precedence: a title or special function takes the highlighted
+      // (pastoral) line via the resolved appellation; ordinary functions keep the
+      // secondary line. Falls back to the legacy fields for the offline cache.
+      pastoral:
+        (member?.categorie_principale === "titre" || member?.categorie_principale === "fonction_speciale") && member?.appellation
+          ? member.appellation
+          : member?.est_berger
+            ? (member?.nom_pastoral_affiche ?? null)
+            : null,
+      fonction:
+        member?.categorie_principale === "titre" || member?.categorie_principale === "fonction_speciale"
+          ? null
+          : (member?.titre ?? null),
       matricule: member?.matricule ?? membreId.slice(0, 8),
       qrToken,
       photoUrl: null,
