@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type ControlEvent, ApiError, getControlEvents, getDirectory } from "./api.js";
 import { Login } from "./components/Login.js";
@@ -12,13 +12,32 @@ import { clearToken, loadToken, saveToken } from "./session.js";
 
 type Tab = "scan" | "manual" | "queue";
 
+// The active tab is mirrored in the URL hash so a refresh stays on the same tab.
+const TABS_CTRL: Tab[] = ["scan", "manual", "queue"];
+function tabFromHash(): Tab {
+  if (typeof window === "undefined") return "scan";
+  const h = window.location.hash.replace(/^#\/?/, "").split("/")[0] as Tab;
+  return TABS_CTRL.includes(h) ? h : "scan";
+}
+
 export function App(): JSX.Element {
   const [token, setToken] = useState<string | null>(() => loadToken());
   const [events, setEvents] = useState<ControlEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [event, setEvent] = useState<ControlEvent | null>(null);
-  const [tab, setTab] = useState<Tab>("scan");
+  const [tab, setTab] = useState<Tab>(() => tabFromHash());
+  const dernierHashTab = useRef<string>("");
+  useEffect(() => {
+    const h = `#/${tab}`;
+    dernierHashTab.current = h;
+    if (typeof window !== "undefined" && window.location.hash !== h) window.history.replaceState(null, "", h);
+  }, [tab]);
+  useEffect(() => {
+    const onHash = (): void => { if (window.location.hash !== dernierHashTab.current) setTab(tabFromHash()); };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const [online, setOnline] = useState<boolean>(navigator.onLine);
   const [queue, setQueue] = useState<number>(pendingCount());
 
