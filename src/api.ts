@@ -124,6 +124,8 @@ export interface LoginResult {
   otpRequired: boolean;
   token: string | null;
   canal: string | null;
+  /** Why the mailbox refused our last messages, when it did. Null otherwise. */
+  alerteEmail: string | null;
 }
 
 function loginError(status: number): ApiError {
@@ -140,8 +142,15 @@ export async function login(email: string, password: string): Promise<LoginResul
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) throw loginError(res.status);
-  const data = (await res.json()) as { otp_required?: boolean; access_token?: string | null; canal?: string | null };
-  return { otpRequired: Boolean(data.otp_required), token: data.access_token ?? null, canal: data.canal ?? null };
+  const data = (await res.json()) as {
+    otp_required?: boolean; access_token?: string | null; canal?: string | null; alerte_email?: string | null;
+  };
+  return {
+    otpRequired: Boolean(data.otp_required),
+    token: data.access_token ?? null,
+    canal: data.canal ?? null,
+    alerteEmail: data.alerte_email ?? null,
+  };
 }
 
 export async function loginVerify(email: string, password: string, code: string, faireConfiance: boolean): Promise<string> {

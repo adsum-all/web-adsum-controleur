@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { ApiError, aAccesControle, login, loginVerify } from "../api.js";
+import { useMarque } from "../useMarque.js";
 import { PasswordInput } from "./PasswordInput.js";
 
 interface LoginProps {
@@ -8,12 +9,14 @@ interface LoginProps {
 }
 
 export function Login({ onAuth }: LoginProps): JSX.Element {
+  const marque = useMarque();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [faireConfiance, setFaireConfiance] = useState(false);
   const [otpRequired, setOtpRequired] = useState(false);
   const [canal, setCanal] = useState<string | null>(null);
+  const [alerteEmail, setAlerteEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -38,6 +41,7 @@ export function Login({ onAuth }: LoginProps): JSX.Element {
       if (result.otpRequired) {
         setOtpRequired(true);
         setCanal(result.canal);
+        setAlerteEmail(result.alerteEmail);
         return;
       }
       if (result.token) await finaliser(result.token);
@@ -50,8 +54,8 @@ export function Login({ onAuth }: LoginProps): JSX.Element {
 
   return (
     <div className="login">
-      <div className="login-logo" aria-hidden="true">A</div>
-      <div className="login-brand">ADSUM</div>
+      <div className="login-logo" aria-hidden="true">{marque.initiale}</div>
+      <div className="login-brand">{marque.marque}</div>
       <p className="login-sub">Contrôle des entrées, scan à la porte</p>
       <form onSubmit={submit} className="login-form">
         {!otpRequired && (
@@ -72,6 +76,10 @@ export function Login({ onAuth }: LoginProps): JSX.Element {
             <p className="login-sub">
               Un code de vérification vous a été envoyé{canal === "telegram" ? " sur Telegram" : " par courriel"}. Saisissez-le pour continuer.
             </p>
+            {/* Styled as an error rather than a warning: this application's palette
+                defines no warning colour, and for whoever is at this screen the code
+                cannot arrive, so the sign-in is blocked rather than merely at risk. */}
+            {alerteEmail && <p className="banner banner-error small">{alerteEmail}</p>}
             <label>
               <span>Code de vérification</span>
               <input type="text" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} required />
