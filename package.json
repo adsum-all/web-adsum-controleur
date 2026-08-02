@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && node scripts/verifier-hooks.mjs",
     "test": "vitest run",
     "build": "vite build",
     "preview": "vite preview"
