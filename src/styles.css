@@ -557,3 +557,62 @@ h3 {
   place-items: center;
   padding: 0 4px;
 }
+
+/* --- État du dossier au point de contrôle ---------------------------------
+ *
+ * The controller decides in a second, in a queue, sometimes in the dark. These
+ * states have to read at a glance and say what they mean in words, because a colour
+ * alone is not a reason anybody can repeat to the person in front of them.
+ */
+
+.result-etat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin: 10px 0 4px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.result-etat strong { font-size: 13.5px; }
+.result-etat-detail { font-size: 11px; opacity: 0.85; }
+
+.result-etat-ok { background: rgba(31, 138, 91, 0.14); color: #16603f; }
+.result-etat-alerte { background: rgba(181, 115, 26, 0.16); color: #7a4d0d; }
+.result-etat-refuse { background: rgba(192, 57, 43, 0.16); color: #8c2820; }
+.result-etat-inconnu { background: rgba(90, 100, 128, 0.12); color: #454d63; }
+
+.result-motif {
+  margin: 6px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #8c2820;
+}
+
+.result-alerte {
+  margin: 6px 0;
+  padding: 7px 11px;
+  border-radius: 9px;
+  background: rgba(181, 115, 26, 0.16);
+  color: #7a4d0d;
+  font-size: 12.5px;
+}
+
+.etat-fiche {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.etat-fiche-ok { background: rgba(31, 138, 91, 0.14); color: #16603f; }
+.etat-fiche-alerte { background: rgba(181, 115, 26, 0.16); color: #7a4d0d; }
+.etat-fiche-refuse { background: rgba(192, 57, 43, 0.16); color: #8c2820; }
+
+.event:disabled { opacity: 0.55; cursor: not-allowed; }

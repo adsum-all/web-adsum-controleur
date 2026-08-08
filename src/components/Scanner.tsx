@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { type ControlEvent, verify } from "../api.js";
 import { findById } from "../directory.js";
-import { enqueue, pendingCount, syncQueue } from "../queue.js";
+import { enqueue, pendingCount, relire, syncQueue } from "../queue.js";
 import { verifyQrToken } from "../qr.js";
 
 interface ScannerProps {
@@ -11,6 +11,15 @@ interface ScannerProps {
   event: ControlEvent;
   online: boolean;
   onQueueChange: () => void;
+}
+
+/** What the server said about the file behind the badge, once it has answered. */
+interface EtatProfil {
+  verdict: "autorise" | "alerte" | "refuse";
+  raison: string | null;
+  statut: string | null;
+  statutInscription: string | null;
+  identiteVerifiee: boolean;
 }
 
 type View =
@@ -24,9 +33,14 @@ type View =
       matricule: string;
       qrToken: string;
       photoUrl: string | null;
+      /** Null until the server answers, or offline where it never will. */
+      etat: EtatProfil | null;
     }
   | { kind: "invalid"; reason: string }
-  | { kind: "saved"; label: string };
+  | { kind: "saved"; label: string; alerte: string | null; differe: boolean }
+  // A refusal deserves its own screen. Presenting it as a success is how a person
+  // walks in while no attendance is ever written.
+  | { kind: "echec"; label: string; raison: string };
 
 export function Scanner({ token, event, online, onQueueChange }: ScannerProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -96,19 +110,39 @@ export function Scanner({ token, event, online, onQueueChange }: ScannerProps): 
       matricule: member?.matricule ?? membreId.slice(0, 8),
       qrToken,
       photoUrl: null,
+      etat: null,
     });
-    // When online, ask the API for the signed identity photo. This never blocks
-    // the door: the card renders immediately with the initials fallback and the
-    // photo is swapped in as soon as it arrives. Offline, this call is skipped
-    // and the initials placeholder stays.
+    // When online, ask the API what it makes of this badge. This never blocks the
+    // door: the card renders immediately from the local cache, and the server's
+    // answer arrives a moment later. Offline it never comes, and the card says so.
+    //
+    // The answer carries three things and all three are used. The photograph, which
+    // is what the controller compares with the face. The signature verdict, which is
+    // the only authority on expiry: the local check runs against the terminal's own
+    // clock, so a device set to the wrong time accepts an expired badge and says
+    // VÉRIFIÉ. And the state of the file, because a genuine badge says nothing about
+    // whether the organisation still counts this person as a member.
     if (online) {
       void verify(token, qrToken)
         .then((result) => {
-          const photoUrl = result.photo_url ?? null;
-          if (!photoUrl) return;
+          if (!result.valid) {
+            setView((current) =>
+              current.kind === "valid" && current.membreId === membreId
+                ? { kind: "invalid", reason: result.reason ?? "jeton refusé par le serveur" }
+                : current,
+            );
+            return;
+          }
+          const etat: EtatProfil = {
+            verdict: (result.verdict as EtatProfil["verdict"]) ?? "autorise",
+            raison: result.verdict_raison ?? null,
+            statut: result.statut ?? null,
+            statutInscription: result.statut_inscription ?? null,
+            identiteVerifiee: Boolean(result.identite_verifiee),
+          };
           setView((current) =>
             current.kind === "valid" && current.membreId === membreId
-              ? { ...current, photoUrl }
+              ? { ...current, photoUrl: result.photo_url ?? current.photoUrl, etat }
               : current,
           );
         })
@@ -117,20 +151,47 @@ export function Scanner({ token, event, online, onQueueChange }: ScannerProps): 
   }
 
   async function confirmPresence(v: Extract<View, { kind: "valid" }>): Promise<void> {
-    enqueue({
-      kind: "qr",
-      qrToken: v.qrToken,
-      evenementId: event.id,
-      membreId: v.membreId,
-      matricule: v.matricule,
-      label: v.label,
-    });
+    const item = enqueue(
+      {
+        kind: "qr",
+        qrToken: v.qrToken,
+        evenementId: event.id,
+        membreId: v.membreId,
+        matricule: v.matricule,
+        label: v.label,
+      },
+      token,
+    );
     onQueueChange();
-    if (online) {
-      await syncQueue(token);
-      onQueueChange();
+
+    // Offline, the entry waits and the screen says so. Nothing has reached the
+    // server yet, and calling that "recorded" would be a lie the controller acts on.
+    if (!online) {
+      setView({ kind: "saved", label: v.label, alerte: null, differe: true });
+      return;
     }
-    setView({ kind: "saved", label: v.label });
+
+    await syncQueue(token);
+    onQueueChange();
+
+    // Read back what became of THIS entry. Previously the outcome was discarded and
+    // the success screen shown unconditionally: on a refusal the queue emptied, the
+    // banner read "file 0, synchronisée", and no attendance existed anywhere.
+    const apres = relire(item.id);
+    if (apres?.status === "rejected") {
+      setView({
+        kind: "echec",
+        label: v.label,
+        raison: apres.error ?? "Le serveur a refusé ce pointage.",
+      });
+      return;
+    }
+    setView({
+      kind: "saved",
+      label: v.label,
+      alerte: v.etat?.verdict === "alerte" ? v.etat.raison : null,
+      differe: apres?.status !== "synced",
+    });
   }
 
   if (view.kind === "valid") {
@@ -150,10 +211,20 @@ export function Scanner({ token, event, online, onQueueChange }: ScannerProps): 
         <h2>{view.label}</h2>
         {view.pastoral && <p className="result-pastoral">{view.pastoral}</p>}
         {view.fonction && <p className="result-fonction">{view.fonction}</p>}
-        <p className="result-id">{view.matricule} . VÉRIFIÉ</p>
+        {/* The badge and the file are two different things and the card says both.
+            A signature that checks out only proves the badge is genuine. */}
+        <p className="result-id">
+          {view.matricule} . {view.etat ? "QR VALIDÉ PAR LE SERVEUR" : online ? "VÉRIFICATION..." : "QR VÉRIFIÉ HORS LIGNE"}
+        </p>
+        <EtatDuProfil etat={view.etat} online={online} />
         <p className="muted">{event.titre}</p>
-        <button type="button" className="btn btn-ok" onClick={() => void confirmPresence(view)}>
-          Confirmer la présence
+        <button
+          type="button"
+          className="btn btn-ok"
+          disabled={view.etat?.verdict === "refuse"}
+          onClick={() => void confirmPresence(view)}
+        >
+          {view.etat?.verdict === "refuse" ? "Pointage impossible" : "Confirmer la présence"}
         </button>
         <button type="button" className="btn btn-ghost" onClick={() => setView({ kind: "scan" })}>
           Refuser
@@ -175,15 +246,37 @@ export function Scanner({ token, event, online, onQueueChange }: ScannerProps): 
     );
   }
 
+  if (view.kind === "echec") {
+    return (
+      <div className="result result-invalid">
+        <div className="result-glyph result-bad">!</div>
+        <h2>Pointage refusé</h2>
+        <p className="muted">{view.label}</p>
+        <p className="result-motif">{view.raison}</p>
+        <p className="muted small">Aucune présence n'a été enregistrée pour cette personne.</p>
+        <button type="button" className="btn btn-primary" onClick={() => setView({ kind: "scan" })}>
+          Scanner le suivant
+        </button>
+      </div>
+    );
+  }
+
   if (view.kind === "saved") {
     return (
       <div className="result result-saved">
         <div className="result-glyph result-ok">OK</div>
-        <h2>Présence enregistrée</h2>
+        <h2>{view.differe ? "Présence en attente d'envoi" : "Présence enregistrée"}</h2>
         <p className="muted">
           {view.label} . {event.titre}
         </p>
-        <p className="muted small">file {pendingCount()} . {online ? "synchronisée" : "synchro différée"}</p>
+        {/* A warning that did not block still has to be seen: a file whose
+            registration is not approved is something the office will want to know. */}
+        {view.alerte && <p className="result-alerte">{view.alerte}</p>}
+        <p className="muted small">
+          {view.differe
+            ? `file ${pendingCount()} . sera envoyée dès le retour du réseau`
+            : `file ${pendingCount()} . enregistrée sur le serveur`}
+        </p>
         <button type="button" className="btn btn-ok" onClick={() => setView({ kind: "scan" })}>
           Scanner le suivant
         </button>
@@ -228,4 +321,40 @@ export function Scanner({ token, event, online, onQueueChange }: ScannerProps): 
 
 function initials(label: string): string {
   return label.slice(0, 2).toUpperCase();
+}
+
+/**
+ * The state of the file behind the badge, as the server sees it.
+ *
+ * Shown before the controller confirms, because that is the moment the decision is
+ * taken. A suspended member, an unfinished registration and a fully approved file all
+ * produced the same green card before this, and the presence was written in silence.
+ */
+function EtatDuProfil({ etat, online }: { etat: EtatProfil | null; online: boolean }): JSX.Element {
+  if (!online) {
+    return (
+      <p className="result-etat result-etat-inconnu">
+        Hors ligne : l'état du dossier n'a pas pu être vérifié.
+      </p>
+    );
+  }
+  if (!etat) {
+    return <p className="result-etat result-etat-inconnu">Vérification du dossier...</p>;
+  }
+  const classe =
+    etat.verdict === "refuse" ? "result-etat-refuse"
+      : etat.verdict === "alerte" ? "result-etat-alerte" : "result-etat-ok";
+  return (
+    <div className={`result-etat ${classe}`}>
+      <strong>
+        {etat.verdict === "refuse" ? "Dossier fermé"
+          : etat.verdict === "alerte" ? "À vérifier" : "Dossier validé"}
+      </strong>
+      <span>{etat.raison}</span>
+      <span className="result-etat-detail">
+        Statut {etat.statut ?? "inconnu"} . inscription {etat.statutInscription ?? "inconnue"}
+        {" . "}identité {etat.identiteVerifiee ? "vérifiée" : "non vérifiée"}
+      </span>
+    </div>
+  );
 }
