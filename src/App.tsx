@@ -59,6 +59,16 @@ export function App(): JSX.Element {
     setToken(null);
     setEvent(null);
     setEvents([]);
+    // The cached directory belongs to the session that fetched it and must not be
+    // read by the next controller. The pending queue is deliberately KEPT: it holds
+    // check-ins that never reached the server, and clearing it here would destroy
+    // attendances. Each entry now carries its author, so the next controller cannot
+    // sync them under their own name; they wait for the person who recorded them.
+    try {
+      localStorage.removeItem("adsum.controleur.directory");
+    } catch {
+      /* private mode */
+    }
   }
 
   const loadSession = useCallback(async (jwt: string) => {

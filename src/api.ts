@@ -44,6 +44,20 @@ export interface VerifyResult {
   matricule?: string | null;
   nom?: string | null;
   photo_url?: string | null;
+  /**
+   * What the server makes of the file behind the badge, which is a separate question
+   * from whether the signature is genuine.
+   *
+   * autorise: the presence may be recorded.
+   * alerte:   it may be recorded, but the controller must see why it was flagged.
+   * refuse:   the organisation has closed this file and no presence is written.
+   */
+  verdict?: "autorise" | "alerte" | "refuse";
+  verdict_raison?: string | null;
+  verdict_code?: string | null;
+  statut?: string | null;
+  statut_inscription?: string | null;
+  identite_verifiee?: boolean;
 }
 
 export interface DirectoryMember {
