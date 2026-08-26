@@ -6,6 +6,9 @@ import { EventPicker } from "./components/EventPicker.js";
 import { ManualEntry } from "./components/ManualEntry.js";
 import { Scanner } from "./components/Scanner.js";
 import { SyncQueue } from "./components/SyncQueue.js";
+import { BoutonAide, ClientAide } from "@adsum/ui-web";
+import { API_BASE } from "./api.js";
+import { precharger, rangementAide, viderAide } from "./aideLocale.js";
 import { cacheDirectory } from "./directory.js";
 import { pendingCount } from "./queue.js";
 import { clearToken, loadToken, saveToken } from "./session.js";
@@ -22,6 +25,16 @@ function tabFromHash(): Tab {
 
 export function App(): JSX.Element {
   const [token, setToken] = useState<string | null>(() => loadToken());
+  // Construit une seule fois. Le jeton est relu a chaque appel, si bien qu une
+  // reconnexion n oblige pas a reconstruire le client.
+  const aide = useRef(
+    new ClientAide({
+      api: API_BASE,
+      application: "controleur",
+      jeton: () => loadToken() ?? "",
+      rangement: rangementAide,
+    }),
+  ).current;
   const [events, setEvents] = useState<ControlEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +82,9 @@ export function App(): JSX.Element {
     } catch {
       /* private mode */
     }
+    // Meme raison que l annuaire : les articles gardes ont ete filtres selon les
+    // droits de la personne qui les a charges.
+    viderAide();
   }
 
   const loadSession = useCallback(async (jwt: string) => {
@@ -78,6 +94,10 @@ export function App(): JSX.Element {
       const [evts] = await Promise.all([
         getControlEvents(jwt),
         getDirectory(jwt).then(cacheDirectory).catch(() => undefined),
+        // Pendant que la connexion tient. Cette application n enregistre aucun
+        // service worker : une aide chargee par le reseau serait absente au moment
+        // exact ou elle sert, devant une file et sans couverture.
+        precharger((ecran) => aide.parEcran(ecran)),
       ]);
       setEvents(evts);
     } catch (err) {
@@ -133,6 +153,7 @@ export function App(): JSX.Element {
           Changer
         </button>
         <span className="topbar-title">{event.titre}</span>
+        <BoutonAide client={aide} cleEcran={`controleur.${tab}`} />
         <button type="button" className="link" onClick={logout}>
           Quitter
         </button>

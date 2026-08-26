@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@adsum/tokens": "^0.1.0",
+    "@adsum/ui-web": "^0.1.0",
     "@noble/curves": "^1.6.0",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",

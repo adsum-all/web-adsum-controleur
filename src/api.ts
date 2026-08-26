@@ -4,6 +4,11 @@
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "https://adsum-api.vercel.app";
 
+// The same root the rest of the application calls. Exported so the help client
+// cannot end up pointing somewhere else: two roots would work in development and
+// diverge the day one environment variable is set and the other is not.
+export const API_BASE = BASE;
+
 export interface ControlEvent {
   id: string;
   titre: string;
